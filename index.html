@@ -17,7 +17,7 @@
   --kraft:#EFE6D2;--paper:#FBF7EE;--paper2:#F3ECDD;--ink:#22252A;--ink2:#3A3E45;
   --yel:#F5B700;--ora:#E2571E;--red:#C2362B;--grn:#2F7A4A;--grey:#CFC5B0;
   --rule:#CDBF9F;--muted:#6E6556;--light:#B9B2A3;
-  --enc:#22252A;--card:#fff;--okbg:var(--okbg);--dots:rgba(110,101,86,.07);
+  --enc:#22252A;--card:#fff;--okbg:#E2F0E5;--dots:rgba(110,101,86,.07);
   --t:'Oswald',Impact,sans-serif;--b:'Roboto Condensed',Arial Narrow,sans-serif;--m:'Roboto Mono',ui-monospace,monospace;
   --safeB:env(safe-area-inset-bottom,0px);--safeT:env(safe-area-inset-top,0px);
   --stripe:repeating-linear-gradient(-45deg,var(--yel) 0 9px,var(--enc) 9px 18px);
@@ -359,21 +359,21 @@ html[data-theme="nuit"] .tag,html[data-theme="cine"] .tag{filter:saturate(.85) b
   <button class="tab" data-act="tab:entretien"><svg class="i" viewBox="0 0 24 24"><path d="M14.7 6.3a4 4 0 0 0-5.2 5.2l-5.8 5.8a1.8 1.8 0 0 0 2.5 2.5l5.8-5.8a4 4 0 0 0 5.2-5.2l-2.5 2.5-2.3-.6-.6-2.3z"/></svg>ENTRETIEN</button>
   <button class="plus" data-act="plus" aria-label="Noter un passage"><svg class="i" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></button>
   <button class="tab" data-act="tab:histo"><svg class="i" viewBox="0 0 24 24"><path d="M5 4h11l3 3v13H5z"/><path d="M9 10h6M9 14h6M9 18h3"/></svg>HISTORIQUE</button>
+  <button class="tab" data-act="trophees"><svg class="i" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0z"/><path d="M8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M9 20h6M10 17h4"/></svg>TROPHÉES</button>
 </nav>
 
 <div class="veil" id="veil" data-act="close"></div>
 <div class="sheet" id="sheet"><div id="sheetIn"></div></div>
 <div class="toast" id="toast"><span id="toastT"></span><button id="toastB" hidden></button></div>
-<input type="file" id="fileIn" accept="image/*" capture="environment" hidden>
-<input type="file" id="galIn" accept="image/*" multiple hidden>
 <div id="lock" hidden></div>
 
+<script src="version.js"></script>
 <script>
 /* ================= CONFIG ================= */
 // Colle ici l'URL de ton déploiement Apps Script (…/exec). Sinon l'app te la demandera à la première ouverture.
-const API_URL = 'https://script.google.com/macros/s/AKfycbysEJTeMDjtS2WHicGgse_l9PJ0h6NL7mYTExIOTW1_aHGp31UzkBzhhTmnsFg1NXsy/exec'; // ex. 'https://script.google.com/macros/s/…/exec' (sinon l'app la demandera)
+const API_URL = 'https://script.google.com/macros/s/AKfycbysEJTeMDjtS2WHicGgse_l9PJ0h6NL7mYTExIOTW1_aHGp31UzkBzhhTmnsFg1NXsy/exec';   // adresse par défaut ; une adresse collée à l'écran de connexion la remplace (après le transfert)
 const SHEET_URL = 'https://docs.google.com/spreadsheets/d/1c6QmIPksL1X3BFXcjKnOWXjcEGpxootf6Uz1FVkpxZY/edit';
-const VERSION = '1.7';
+const VERSION = (self.CARNET_VERSION || {}).app || '?';   // le numéro se change dans version.js
 
 /* ================= OUTILS ================= */
 const $ = s => document.querySelector(s);
@@ -438,7 +438,7 @@ const S = {
   hZone: null, iq: '', iPiece: null, iFiltre: null, form: null, busy: false, lastFetch: 0
 };
 (function () { const c = LS.get('cache', null); if (c) S.d = c; })();
-const apiUrl = () => (API_URL && !API_URL.startsWith('COLLE')) ? API_URL : S.url;
+const apiUrl = () => S.url || API_URL;   // l'adresse collée par Carla passe avant celle du code
 function sauver() { LS.set('cache', S.d); LS.set('queue', S.queue); }
 
 /* ================= CALCULS ================= */
@@ -451,25 +451,29 @@ function etatDe(t) {
 function recalc(t) { // recalcule une tâche à partir de l'historique local (comme les formules du fichier)
   const h = S.d.historique.filter(x => x.element === t.element && !x.deleted);
   t.dernier = h.reduce((m, x) => x.date > m ? x.date : m, '');
-  t.prochain = t.dernier && t.freq ? edate(t.dernier, t.freq) : '';
+  t.prochain = t.dernier && t.freq ? plusFreq(t.dernier, t.freq) : '';   // 1.8 : fréquence décimale (0,5 mois…) bien comptée
   t.jours = t.prochain ? diffJ(t.prochain, today()) : null;
   t.etat = etatDe(t);
 }
 function rafraichirEtats() { if (!S.d) return; S.d.entretien.forEach(t => { t.jours = t.prochain ? diffJ(t.prochain, today()) : null; t.etat = etatDe(t); }); }
 const ordreUrg = (a, b) => (a.prochain || '0000') < (b.prochain || '0000') ? -1 : (a.prochain || '0000') > (b.prochain || '0000') ? 1 : 0;
-const valeurMobilier = () => S.d.inventaire.filter(x => x.categorie !== 'Travaux').reduce((s, x) => s + (Number(x.prix) || 0), 0);
 const histo = () => S.d.historique.filter(x => !x.deleted);
 
 /* ================= API ================= */
-function api(action, extra) {
-  const body = JSON.stringify(Object.assign({ action, key: S.key }, extra || {}));
-  return fetch(apiUrl(), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, redirect: 'follow' })
-    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); });
+function api(action, extra, uid) {
+  const body = JSON.stringify(Object.assign({ action, key: S.key }, extra || {}, uid ? { uid } : {}));
+  // 1.8 : délai maximal de 30 s (avant : une connexion figée bloquait la file sans message)
+  const ab = window.AbortController ? new AbortController() : null, minu = ab ? setTimeout(() => ab.abort(), 30000) : null;
+  return fetch(apiUrl(), { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body, redirect: 'follow', signal: ab ? ab.signal : undefined })
+    .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+    .finally(() => clearTimeout(minu));
 }
+const nouvelUid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 10);
 function setSync(s) { $('#dot').className = 'dot' + (s === 'sync' ? ' sync' : s === 'off' ? ' off' : ''); }
 function charger(d) {
   // conserve les passages locaux pas encore envoyés
-  const loc = S.d ? S.d.historique.filter(x => x.pending && !x.row) : [];
+  const enFile = new Set(S.queue.filter(o => o.op === 'fait').map(o => o.id || (o.h && o.h.id)));
+  const loc = S.d ? S.d.historique.filter(x => x.pending && !x.row && enFile.has(x.id)) : [];   // 1.8 : plus de passage « fantôme » resté en « envoi… »
   S.d = d; S.d.historique = d.historique.concat(loc.filter(l => !d.historique.some(h => h.row && h.element === l.element && h.date === l.date && !l.row)));
   if (loc.length) S.d.entretien.forEach(recalc);
   rafraichirEtats(); sauver();
@@ -488,7 +492,28 @@ async function rafraichir(force) {
 }
 
 /* file d'écritures : l'écran se met à jour tout de suite, l'envoi suit */
-function enfiler(op) { S.queue.push(op); sauver(); pomper(); }
+function enfiler(op) {
+  op.uid = op.uid || nouvelUid();   // 1.8 : identifiant unique, le serveur ignore un renvoi (plus de doublon après une coupure)
+  // 1.8 : un élément créé puis modifié avant l'envoi → une seule écriture (la dernière), pas deux lignes
+  if (op.op === 'call' && op.action === 'jeu-save') {   // 1.8.1 : thème/trophées : seule la dernière sauvegarde compte
+    const q = S.queue.find((o, i) => !(i === 0 && S.busy) && o.action === 'jeu-save');
+    if (q) { q.payload = op.payload; sauver(); pomper(); return; }
+  }
+  if (op.op === 'call' && op.after && op.id && /-save$/.test(op.action)) {
+    const q = S.queue.find((o, i) => !(i === 0 && S.busy) && o.op === 'call' && o.after === op.after && o.id === op.id && o.action === op.action);
+    if (q) { q.payload = op.payload; sauver(); pomper(); return; }
+  }
+  S.queue.push(op); sauver(); pomper();
+}
+/** 1.8 : un élément supprimé avant que sa création soit partie → on retire la création en attente (il ne réapparaît plus) */
+function retirerEnAttente(after, id) { S.queue = S.queue.filter((o, i) => (i === 0 && S.busy) || !(o.op === 'call' && o.after === after && o.id === id)); sauver(); }
+/** 1.8 : après une suppression de ligne dans le fichier, les lignes du dessous remontent d'un cran : l'appli suit */
+function decalerLignes(feuille, ligne) {
+  const l = feuille === 'inv' ? S.d.inventaire : null; if (!l) return;
+  l.forEach(x => { if (x.row && x.row > ligne) x.row--; });
+  S.queue.forEach(o => { if (o.op === 'call' && /^inv-/.test(o.action) && o.payload && o.payload.row > ligne) o.payload.row--; });
+}
+const ERREURS_PASSAGERES = ['SERVEUR', 'OCCUPE', 'VERROU'];
 async function pomper() {
   if (S.busy) return;
   const op = S.queue[0];
@@ -500,31 +525,46 @@ async function pomper() {
       const h = op.h || S.d.historique.find(x => x.id === op.id);
       if (!h || h.deleted) res = { ok: true, skip: true };
       else {
-        res = await api('fait', { element: h.element, date: h.date, duree: h.duree });
+        res = await api('fait', { element: h.element, date: h.date, duree: h.duree }, op.uid);
         if (res.ok) {
           h.row = res.row; h.pending = false; h.srv = { date: h.date, element: h.element };
           // annulé pendant l'envoi : on retire la ligne qui vient d'être écrite
-          if (h.deleted) { S.queue.push({ op: 'annuler', row: res.row, attendu: h.srv }); delete res.tache; }
+          if (h.deleted) { S.queue.push({ op: 'annuler', row: res.row, attendu: h.srv, uid: nouvelUid() }); delete res.tache; }
         }
       }
     } else if (op.op === 'annuler') {
-      res = await api('fait-annuler', { row: op.row, attendu: op.attendu });
+      res = await api('fait-annuler', { row: op.row, attendu: op.attendu }, op.uid);
     } else if (op.op === 'maj') {
       const h = S.d.historique.find(x => x.id === op.id);
       if (!h || !h.row) res = { ok: true };
-      else { res = await api('passage-maj', { row: h.row, attendu: h.srv, date: h.date, duree: h.duree }); if (res.ok) { h.srv = { date: h.date, element: h.element }; h.pending = false; } }
+      else { res = await api('passage-maj', { row: h.row, attendu: h.srv, date: h.date, duree: h.duree }, op.uid); if (res.ok) { h.srv = { date: h.date, element: h.element }; h.pending = false; } }
     } else {
-      res = await api(op.action, op.payload);
+      // 1.8 : la ligne est relue au moment de l'envoi (un élément créé hors ligne a pu recevoir sa ligne entre-temps)
+      if (op.after && op.id && op.payload && !op.payload.row) {
+        const liste = { bien: S.d.inventaire, contact: S.d.contacts, conso: S.d.consommables || [] }[op.after], o = liste && liste.find(x => x.id === op.id);
+        if (o && o.row) { op.payload.row = o.row; if (op.after === 'bien') op.payload.attendu = { objet: o.srvObjet || o.objet }; else if (o.srv) op.payload.attendu = o.srv; }
+      }
+      res = await api(op.action, op.payload, op.uid);
       if (res.ok && op.after) apresAppel(op, res);
+      if (res.ok && res.ligneSupprimee) decalerLignes('inv', res.ligneSupprimee);
     }
-  } catch (e) { S.busy = false; setSync('off'); setTimeout(pomper, 8000); return; }
-  S.queue.shift(); S.busy = false;
+  } catch (e) { S.busy = false; setSync('off'); setTimeout(pomper, 8000); return; }   // réseau : on garde tout et on réessaie
+  S.busy = false;
   if (!res.ok && op.facultatif && res.error === 'ACTION') res = { ok: true };   // script pas encore à jour : sans gravité
   if (!res.ok) {
     if (res.error === 'CLE') { sauver(); return verrouiller(res.message); }
-    toast('Pas enregistré dans le fichier : ' + (res.message || 'erreur'));
-    S.queue = []; sauver(); S.lastFetch = 0; rafraichir(true); return;
+    // 1.8 : erreur passagère (fichier occupé…) → on garde l'opération et on réessaie ; avant, TOUTE la file était vidée
+    op.essais = (op.essais || 0) + 1;
+    if (ERREURS_PASSAGERES.includes(res.error) && op.essais < 5) { sauver(); setSync('off'); setTimeout(pomper, 8000 * op.essais); return; }
+    // refus définitif : on ne retire QUE cette opération, les autres saisies continuent de partir
+    S.queue.shift();
+    if (op.op === 'fait') { const h = op.h || S.d.historique.find(x => x.id === op.id); if (h && !h.row) { S.d.historique = S.d.historique.filter(x => x !== h); S.d.entretien.forEach(recalc); } }
+    toast('Pas enregistré dans le fichier : ' + (res.message || 'erreur') + (S.queue.length ? ' · les autres saisies continuent' : ''));
+    sauver(); rendre(true); S.lastFetch = 0;
+    if (S.queue.length) pomper(); else rafraichir(true);
+    return;
   }
+  S.queue.shift();
   if (res.tache) { const t = S.d.entretien.find(x => x.element === res.tache.element); if (t && !S.queue.some(o => o.op === 'fait' || o.op === 'maj')) Object.assign(t, res.tache); }
   sauver(); rendre(true); pomper();
 }
@@ -646,45 +686,6 @@ function vHisto() {
 }
 const zoneDe = el => (S.d.entretien.find(t => t.element === el) || {}).zone || '';
 
-/* ---------- INVENTAIRE ---------- */
-function vInventaire() {
-  const I = S.d.inventaire, val = valeurMobilier(), pf = S.d.plafond || 28000, pct = Math.round(100 * val / pf);
-  const sansPhoto = I.filter(b => !b.photo).length, sansPrix = I.filter(b => !b.prix).length, star = I.filter(b => b.garantie > 2).length;
-  let h = `<div class="ink" style="margin-bottom:12px"><div class="lab">Valeur du mobilier</div><div class="val">${e0(val)} <span style="font-size:14px;font-weight:400;color:var(--light)">/ ${e0(pf)}</span></div>
-    <div class="gauge"><i style="width:${Math.min(pct, 100)}%;background:${pct >= 95 ? 'var(--red)' : pct >= 90 ? 'var(--ora)' : 'var(--yel)'}"></i></div><div class="sub">${I.length} biens · ${pct} % du plafond MAIF · hors travaux</div></div>`;
-  if (pct >= 95) h += `<div class="alerte rouge"><span>⚠️</span><span><b>Plafond MAIF presque atteint</b><br>Au-delà de ${e0(pf)}, la différence n'est pas remboursée en cas de sinistre : demande un relèvement du capital mobilier.</span></div>`;
-  const fin30 = I.filter(b => b.finGarantie && b.finGarantie >= today() && b.finGarantie <= addDays(today(), 30)).sort((a, b) => a.finGarantie < b.finGarantie ? -1 : 1);
-  fin30.forEach(b => h += `<button class="alerte" data-act="bien" data-id="${b.id}"><span>🛡</span><span><b>Garantie : fin le ${fr(b.finGarantie)}</b> (dans ${diffJ(b.finGarantie, today())} j)<br>${esc(b.objet)} · teste-le à fond avant la fin, un défaut constaté avant est pris en charge.</span></button>`);
-  h += `<button class="expbtn" data-act="export"><span class="ic">📄</span><span><b>Dossier pour l'assurance</b><small>PDF ou Word · fiches, photos et factures</small></span><span class="chev">›</span></button>`;
-  const J = S.d.jeux || [];
-  if (J.length) h += `<button class="expbtn" data-act="ludo"><span class="ic">🎲</span><span><b>Ludothèque</b><small>${J.filter(j => j.assure).length} jeux et extensions assurés · ${e0(valeurLudo())}</small></span><span class="chev">›</span></button>`;
-  h += `<div class="search">${ICON.search}<input id="iq" type="search" placeholder="Chercher un objet, une marque, un magasin…" value="${esc(S.iq)}"></div>`;
-  const pieces = [...new Set(I.map(b => b.piece))].sort((a, b) => (S.d.listes.pieces.indexOf(a) + 99) % 99 - (S.d.listes.pieces.indexOf(b) + 99) % 99);
-  h += `<div class="chips"><button class="chip ${!S.iPiece ? 'on' : ''}" data-act="ipiece" data-p="">Toutes</button>${pieces.map(p => `<button class="chip ${S.iPiece === p ? 'on' : ''}" data-act="ipiece" data-p="${esc(p)}">${esc(p)}<small>${I.filter(b => b.piece === p).length}</small></button>`).join('')}</div>`;
-  const F = [['maif', '🛡 Sélection MAIF', I.filter(b => b.maif).length], ['photo', '📷 Sans photo', sansPhoto], ['prix', '€ Sans prix', sansPrix], ['couverte', '✓ Sous garantie', I.filter(sousGarantie).length], ['star', '★ Garantie +2 ans', star], ['garantie', 'Garantie à surveiller', I.filter(b => b.statut === 'EXPIRE BIENTÔT' || b.statut === 'EXPIRÉE').length]];
-  h += `<div class="chips">${F.map(([k, l, n]) => `<button class="chip ${S.iFiltre === k ? 'on' : ''}" data-act="ifiltre" data-f="${k}">${l}<small>${n}</small></button>`).join('')}</div>`;
-  h += `<div class="rowline" style="justify-content:space-between;margin:6px 0 8px"><span class="muted" id="icount" style="font-size:12.5px"></span><button class="mini" data-act="bien-new">${ICON.plus}Ajouter un bien</button></div>`;
-  h += `<div class="list" id="ilist">${listeBiens()}</div>`;
-  return h;
-}
-// encore sous garantie aujourd'hui (2 ans légaux ou extension), y compris celles qui expirent bientôt
-const sousGarantie = b => !!b.finGarantie && b.finGarantie >= today();
-function biensFiltres() {
-  const q = norm(S.iq);
-  return S.d.inventaire.filter(b => (!S.iPiece || b.piece === S.iPiece)
-    && (!q || norm([b.objet, b.marque, b.magasin, b.categorie, b.piece, b.remarque, b.serie].join(' ')).includes(q))
-    && (!S.iFiltre || (S.iFiltre === 'maif' ? b.maif : S.iFiltre === 'photo' ? !b.photo : S.iFiltre === 'prix' ? !b.prix : S.iFiltre === 'couverte' ? sousGarantie(b) : S.iFiltre === 'star' ? b.garantie > 2 : (b.statut === 'EXPIRE BIENTÔT' || b.statut === 'EXPIRÉE'))));
-}
-function listeBiens() {
-  const L = biensFiltres();
-  setTimeout(() => { const c = $('#icount'); if (c) c.textContent = L.length + ' bien' + (L.length > 1 ? 's' : '') + ' · ' + e0(L.filter(b => b.categorie !== 'Travaux').reduce((s, b) => s + (Number(b.prix) || 0), 0)); });
-  if (!L.length) return '<div class="empty">Aucun bien ne correspond</div>';
-  return L.map(b => `<div class="item tap ${b.pending ? 'pending' : ''}" data-act="bien" data-id="${b.id}">
-    <div class="grow"><div class="ttl">${esc(b.objet)}</div>${b.marque ? `<div class="desc">${esc(b.marque)}</div>` : ''}
-    <div class="meta">${pieceTag(b.piece)}${b.maif ? '<span class="badge maif">MAIF</span>' : ''}${b.garantie > 2 ? `<span class="badge star">★ ${b.garantie} ans</span>` : ''}${b.statut && b.statut !== 'COUVERTE' ? gStamp(b.statut) : ''}
-    ${b.facture ? '<span class="badge">📄 facture</span>' : ''}${b.photo ? `<span class="badge">${esc(b.photoLabel || '📷 photo')}</span>` : '<span class="badge warn">sans photo</span>'}</div></div>
-    <div class="when"><b>${b.prix ? e2(b.prix) : '<span class="badge warn">prix ?</span>'}</b>${b.date ? frCourt(b.date) + '/' + b.date.slice(2, 4) : ''}</div></div>`).join('');
-}
 
 /* ================= FEUILLES ================= */
 function ouvrir(html) { $('#sheetIn').innerHTML = html; $('#sheet').scrollTop = 0; $('#veil').classList.add('on'); $('#sheet').classList.add('on'); }
@@ -722,7 +723,7 @@ function rendreFait() {
       <label class="chip ${autre ? 'on' : ''}" style="position:relative">📅 ${autre ? fr(f.date) : 'Autre date'}<input type="date" id="fdate" max="${today()}" value="${f.date}" style="position:absolute;inset:0;opacity:0"></label></div>
     <div class="lbl">Durée <span style="text-transform:none;letter-spacing:0">(facultatif)</span></div>
     <div class="chips wrap"><button class="chip ${!f.duree ? 'on' : ''}" data-act="f-duree" data-v="">—</button>${durees.map(d => `<button class="chip ${+f.duree === d ? 'on' : ''}" data-act="f-duree" data-v="${d}">${d} min</button>`).join('')}</div>
-    ${f.mode === 'fait' && t.freq ? `<div class="note">Prochain passage calculé : <b class="mono">${fr(edate(f.date, t.freq))}</b> (${esc(t.freqTxt || freqTxt(t.freq))})</div>` : ''}
+    ${f.mode === 'fait' && t.freq ? `<div class="note">Prochain passage calculé : <b class="mono">${fr(plusFreq(f.date, t.freq))}</b> (${esc(t.freqTxt || freqTxt(t.freq))})</div>` : ''}
     <button class="go" data-act="f-ok">${f.mode === 'maj' ? 'Enregistrer' : '✓ Enregistrer le passage'}</button>
     ${f.mode === 'maj' ? `<button class="go danger ${f.arm ? 'armed' : ''}" data-act="f-del">${f.arm ? 'Confirmer la suppression' : 'Supprimer ce passage'}</button>` : ''}`);
   const di = $('#fdate'); if (di) di.addEventListener('change', () => { if (di.value) { f.date = di.value > today() ? today() : di.value; rendreFait(); } });
@@ -765,195 +766,9 @@ function listeChoix(q) {
 }
 const btnChoix = t => `<button data-act="choix" data-el="${esc(t.element)}"><span class="grow"><b>${esc(t.element)}</b><div class="desc">${esc(t.intervention)}</div></span>${stamp(t.etat)}</button>`;
 
-/* ---------- fiche bien ---------- */
-function ouvrirBien(id) {
-  const b = S.d.inventaire.find(x => x.id === id); if (!b) return;
-  S.form = { mode: 'bien', id };
-  ouvrir(tete(esc(b.objet), esc(b.marque || '')) + `
-    ${galerieHtml(b)}
-    <div class="rowline" style="gap:6px;flex-wrap:wrap;margin-bottom:12px">${pieceTag(b.piece)}<span class="badge">${esc(b.categorie || '—')}</span>${b.garantie > 2 ? `<span class="badge star">★ ${b.garantie} ans</span>` : ''}${gStamp(b.statut)}</div>
-    <div class="kv">
-      <div>Prix TTC</div><div class="mono"><b>${b.prix ? e2(b.prix) : '—'}</b>${b.prixAuto ? ' <span class="badge">calculé</span>' : ''}</div>
-      <div>Acheté le</div><div class="mono">${fr(b.date)}</div>
-      <div>Magasin</div><div>${esc(b.magasin || '—')}</div>
-      <div>N° de série</div><div class="mono">${esc(b.serie || '—')}</div>
-      <div>Garantie</div><div>${b.garantie ? b.garantie + ' an' + (b.garantie > 1 ? 's' : '') + (b.finGarantie ? ' · jusqu\'au <span class="mono">' + fr(b.finGarantie) + '</span>' : '') : '—'}</div>
-    </div>
-    ${b.remarque ? `<div class="note">${esc(b.remarque)}</div>` : ''}
-    ${estLotJeux(b) && (S.d.jeux || []).length ? `<button class="go sec2" data-act="ludo">🎲 Voir la ludothèque (${S.d.jeux.filter(j => j.assure).length})</button>` : ''}
-    <div class="btnrow">
-      ${b.facture ? `<a class="go sec2" href="${esc(b.facture)}" target="_blank" rel="noopener">${esc(b.factureLabel || '📄 Facture')}</a>` : `<span class="go sec2" style="opacity:.45">Pas de facture</span>`}
-      ${b.photo ? `<a class="go sec2" href="${esc(b.photo)}" target="_blank" rel="noopener">${esc(b.photoLabel || '📁 Photos')}</a>` : `<span class="go sec2" style="opacity:.45">Aucune photo</span>`}
-    </div>
-    <button class="go ${b.maif ? 'maifon' : 'sec2'}" data-act="maif" ${b.row ? '' : 'disabled'}>${b.maif ? '✓ Dans le dossier MAIF (retirer)' : '🛡 Ajouter au dossier MAIF'}</button>
-    <div id="photoBox"></div>
-    <div class="btnrow"><button class="go" data-act="photo" ${b.row ? '' : 'disabled'}>📷 Prendre</button><button class="go" data-act="photo-gal" ${b.row ? '' : 'disabled'}>🖼 Galerie</button></div>
-    <button class="go sec2" data-act="bien-edit">✎ Modifier la fiche</button>`);
-  chargerGalerie(b);
-}
 
-/* ---------- photos affichées dans la fiche (action « photos-liste », miniatures gardées en mémoire) ---------- */
-const galCle = b => b.row + '|' + (b.srvObjet || b.objet) + '|' + (b.photoLabel || '');
-const galNb = b => Math.max(1, parseInt(String(b.photoLabel || '').replace(/\D+/g, ' ').trim(), 10) || 1);
-function galerieHtml(b) {
-  if (!b.photo || !b.row || S.galKO) return '';
-  const g = (S.gal || {})[galCle(b)];
-  if (!g) { const n = Math.min(galNb(b), 4); return `<div class="galerie ${n === 1 ? 'un' : ''}" id="galerie">${'<div class="ph"></div>'.repeat(n)}</div>`; }
-  if (g.err) return `<div class="galerie-msg" id="galerie">${esc(g.err)}</div>`;
-  if (!g.photos.length) return '';
-  const reste = g.total - g.photos.length, n = g.photos.length + (reste > 0 ? 1 : 0);
-  return `<div class="galerie ${n === 1 ? 'un' : ''}" id="galerie">` + g.photos.map(p => `<a href="${esc(p.url)}" target="_blank" rel="noopener" title="${esc(p.nom)}"><img src="${p.src}" alt="${esc(p.nom)}" loading="lazy"></a>`).join('')
-    + (reste > 0 ? `<a class="gplus" href="${esc(b.photo)}" target="_blank" rel="noopener">+${reste}</a>` : '') + '</div>';
-}
-async function chargerGalerie(b) {
-  if (!b.photo || !b.row || S.galKO) return;
-  S.gal = S.gal || {}; const cle = galCle(b);
-  if (S.gal[cle] && !S.gal[cle].err) return;
-  const maj = () => { const el = $('#galerie'); if (el && S.form && S.form.mode === 'bien' && S.form.id === b.id) el.outerHTML = galerieHtml(b) || '<span id="galerie"></span>'; };
-  try {
-    const r = await api('photos-liste', { row: b.row, attendu: { objet: b.srvObjet || b.objet } });
-    if (!r.ok) {
-      if (r.error === 'ACTION') { S.galKO = true; S.gal[cle] = { photos: [], total: 0 }; }   // ancien script : pas encore de galerie
-      else S.gal[cle] = { err: r.error === 'DECALE' ? 'Photos : le fichier a changé, réessaie après la synchro.' : 'Photos non chargées : ' + (r.message || 'erreur') };
-    } else S.gal[cle] = { photos: r.photos || [], total: r.total || 0 };
-  } catch (e) { S.gal[cle] = { err: 'Photos visibles dès que tu as du réseau (ou via le bouton ci-dessous).' }; }
-  maj();
-}
-function ouvrirBienEdit(id) {
-  const b = id ? S.d.inventaire.find(x => x.id === id) : null;
-  S.form = { mode: 'bien-edit', id: id || null, v: b ? Object.assign({}, b) : { piece: S.iPiece || 'À préciser', categorie: 'Mobilier', objet: '', marque: '', serie: '', magasin: '', date: '', prix: '', garantie: 2, remarque: '' } };
-  rendreBienEdit();
-}
-function rendreBienEdit() {
-  const f = S.form, v = f.v, L = S.d.listes;
-  ouvrir(tete(f.id ? 'Modifier le bien' : 'Ajouter un bien') + `
-    <div class="lbl">Objet *</div><input class="field" id="b-objet" value="${esc(v.objet)}" placeholder="Ex. Canapé d'angle">
-    <div class="lbl">Pièce</div><div class="chips wrap">${L.pieces.map(p => `<button class="chip ${v.piece === p ? 'on' : ''}" data-act="b-piece" data-p="${esc(p)}">${esc(p)}</button>`).join('')}</div>
-    <div class="lbl">Catégorie</div><select class="field" id="b-categorie">${L.categories.map(c => `<option ${v.categorie === c ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select>
-    <div class="lbl">Marque / modèle</div><input class="field" id="b-marque" value="${esc(v.marque)}">
-    <div class="grid2"><div><div class="lbl">Prix TTC (€)</div><input class="field mono" id="b-prix" inputmode="decimal" value="${v.prix === '' ? '' : String(v.prix).replace('.', ',')}" ${v.prixAuto ? 'readonly style="opacity:.55"' : ''}>${v.prixAuto ? '<div class="muted" style="font-size:11.5px;margin-top:3px">Calculé dans le Sheet : non modifiable ici</div>' : ''}</div>
-      <div><div class="lbl">Date d'achat</div><input class="field mono" id="b-date" type="date" value="${esc(v.date)}"></div></div>
-    <div class="grid2"><div><div class="lbl">Magasin</div><input class="field" id="b-magasin" value="${esc(v.magasin)}"></div>
-      <div><div class="lbl">N° de série</div><input class="field mono" id="b-serie" value="${esc(v.serie)}"></div></div>
-    <div class="lbl">Garantie</div><div class="stepper"><button data-act="b-gar" data-d="-1">−</button><span id="b-gar">${v.garantie || 0} an${v.garantie > 1 ? 's' : ''}</span><button data-act="b-gar" data-d="1">+</button></div>
-    <div class="lbl">Remarque</div><textarea class="field" id="b-remarque">${esc(v.remarque)}</textarea>
-    <div class="err" id="b-err"></div>
-    <button class="go" data-act="b-save">Enregistrer</button>
-    ${f.id ? `<button class="go danger ${f.arm ? 'armed' : ''}" data-act="b-del">${f.arm ? 'Confirmer : retirer de l\'inventaire' : 'Retirer de l\'inventaire'}</button>` : ''}`);
-}
-function lireBienForm() {
-  const v = S.form.v;['objet', 'marque', 'magasin', 'serie', 'remarque', 'date', 'categorie'].forEach(k => { const e = $('#b-' + k); if (e) v[k] = e.value.trim(); });
-  const p = $('#b-prix'); if (p && !v.prixAuto) { const n = Number(p.value.replace(/\s/g, '').replace(',', '.')); v.prix = p.value.trim() === '' || isNaN(n) ? '' : n; }
-}
-function enregistrerBien() {
-  lireBienForm(); const f = S.form, v = f.v;
-  if (!v.objet) { $('#b-err').textContent = "Donne au moins un nom à l'objet"; return; }
-  const champs = { piece: v.piece, categorie: v.categorie, objet: v.objet, marque: v.marque, serie: v.serie, magasin: v.magasin, date: v.date, prix: v.prix, garantie: v.garantie, remarque: v.remarque };
-  let b;
-  if (f.id) {
-    b = S.d.inventaire.find(x => x.id === f.id); const att = { objet: b.srvObjet || b.objet };
-    Object.assign(b, champs, { pending: true }); b.srvObjet = v.objet;
-    if (b.date && b.garantie) { b.finGarantie = edate(b.date, 12 * b.garantie); }
-    enfiler({ op: 'call', action: 'inv-save', payload: { row: b.row, attendu: att, bien: champs }, after: 'bien', id: b.id });
-  } else {
-    b = Object.assign({ id: uid(), pending: true, photo: '', facture: '', statut: '' }, champs); b.srvObjet = v.objet;
-    S.d.inventaire.push(b);
-    enfiler({ op: 'call', action: 'inv-save', payload: { bien: champs }, after: 'bien', id: b.id });
-  }
-  fermer(); rendre(true); toast(f.id ? 'Fiche mise à jour' : 'Bien ajouté à l\'inventaire');
-}
-function supprimerBien() {
-  const f = S.form; if (!f.arm) { lireBienForm(); f.arm = true; rendreBienEdit(); return; }
-  const b = S.d.inventaire.find(x => x.id === f.id); fermer(); if (!b) return;
-  S.d.inventaire = S.d.inventaire.filter(x => x !== b);
-  if (b.row) enfiler({ op: 'call', action: 'inv-del', payload: { row: b.row, attendu: { objet: b.srvObjet || b.objet } } });
-  rendre(true); toast('Retiré de l\'inventaire');
-}
 
-/* ---------- ludothèque (onglet « 🎲 Jeux de société », alimenté par l'export MyLudo) ---------- */
-const estLotJeux = b => /^jeux de soci/i.test(b.objet || '');
-const valeurLudo = () => (S.d.jeux || []).filter(j => j.assure).reduce((s, j) => s + (Number(j.valeur) || 0), 0);
-function ouvrirLudo() {
-  S.form = { mode: 'ludo' }; S.lq = S.lq || ''; S.lf = S.lf || '';
-  const J = S.d.jeux || [];
-  const F = [['', 'Tous', J.length], ['Jeu', 'Jeux', J.filter(j => j.type !== 'Extension' && j.type !== 'Accessoire').length], ['Extension', 'Extensions', J.filter(j => j.type === 'Extension').length],
-    ['prix', '€ Sans prix', J.filter(j => !j.valeur).length], ['non', 'Non assurés', J.filter(j => !j.assure).length]];
-  ouvrir(tete('🎲 Ludothèque', `${J.filter(j => j.assure).length} assurés · <b>${e0(valeurLudo())}</b> en valeur à neuf`) + `
-    <div class="search">${ICON.search}<input id="lq" type="search" placeholder="Chercher un jeu, un éditeur…" value="${esc(S.lq)}"></div>
-    <div class="chips">${F.filter(f => f[2] || !f[0]).map(([k, l, n]) => `<button class="chip ${S.lf === k ? 'on' : ''}" data-act="lfiltre" data-f="${k}">${l}<small>${n}</small></button>`).join('')}</div>
-    <div class="list" id="llist">${listeJeux()}</div>
-    <button class="go sec2" data-act="export-ludo">📄 Exporter la ludothèque (PDF / Word)</button>
-    <div class="note">Liste tenue à jour depuis MyLudo : réexporte ta ludothèque et dépose le fichier dans le Drive (MyLudo (exports)).</div>`);
-}
-function listeJeux() {
-  const q = norm(S.lq || ''), f = S.lf;
-  const L = (S.d.jeux || []).filter(j => (!q || norm([j.titre, j.editeur, j.type].join(' ')).includes(q))
-    && (!f || (f === 'Jeu' ? j.type !== 'Extension' && j.type !== 'Accessoire' : f === 'prix' ? !j.valeur : f === 'non' ? !j.assure : j.type === f)));
-  if (!L.length) return '<div class="empty">Aucun jeu ne correspond</div>';
-  return L.map(j => `<div class="item tap ${j.pending ? 'pending' : ''}" data-act="jeu" data-row="${j.row}" ${j.assure ? '' : 'style="opacity:.5"'}>
-    <div class="grow"><div class="ttl">${esc(j.titre)}</div><div class="desc">${esc(j.editeur || '')}</div>
-    <div class="meta"><span class="badge">${esc(j.type)}</span>${j.sleeve ? '<span class="badge">sleevé</span>' : ''}${j.insert ? '<span class="badge">insert</span>' : ''}${j.proprio ? `<span class="badge warn">à ${esc(j.proprio)}</span>` : ''}${!j.assure ? '<span class="badge warn">non assuré</span>' : ''}</div></div>
-    <div class="when"><b>${j.valeur ? e2(j.valeur) : '<span class="badge warn">prix ?</span>'}</b>${j.date ? frCourt(j.date) + '/' + j.date.slice(2, 4) : ''}</div></div>`).join('');
-}
-function ouvrirJeu(row) {
-  const j = (S.d.jeux || []).find(x => x.row === +row); if (!j) return;
-  S.form = { mode: 'jeu', row: j.row };
-  ouvrir(tete(esc(j.titre), esc(j.editeur || '')) + `
-    <div class="kv">
-      <div>Type</div><div>${esc(j.type || '—')}</div>
-      <div>Édition</div><div class="mono">${esc(j.edition || '—')}</div>
-      <div>Acquis le</div><div class="mono">${fr(j.date)}</div>
-      <div>Valeur à neuf</div><div class="mono"><b>${j.valeur ? e2(j.valeur) : '—'}</b></div>
-      <div>Source du prix</div><div>${esc(j.source || '—')}</div>
-      <div>Protection</div><div>${[j.sleeve ? 'sleevé' : '', j.insert ? 'insert' : ''].filter(Boolean).join(' · ') || 'aucune'}</div>
-      ${j.proprio ? `<div>Propriétaire</div><div>${esc(j.proprio)}</div>` : ''}
-    </div>
-    ${j.remarque ? `<div class="note">${esc(j.remarque)}</div>` : ''}
-    <button class="go ${j.assure ? 'maifon' : 'sec2'}" data-act="jeu-assure">${j.assure ? '✓ Compté dans la valeur assurée (retirer)' : 'Compter dans la valeur assurée'}</button>
-    <button class="go sec2" data-act="ludo">‹ Retour à la ludothèque</button>`);
-}
-function basculerJeu() {
-  const j = (S.d.jeux || []).find(x => x.row === S.form.row); if (!j) return;
-  j.assure = !j.assure; j.pending = true;
-  const lot = S.d.inventaire.find(estLotJeux); if (lot) lot.prix = valeurLudo();
-  enfiler({ op: 'call', action: 'jeu-assurer', payload: { row: j.row, attendu: { titre: j.titre }, assure: j.assure }, after: 'jeu', row: j.row });
-  ouvrirJeu(j.row); rendre(true);
-  toast(j.assure ? 'Compté dans la valeur assurée' : 'Retiré de la valeur assurée');
-}
 
-/* ---------- photo ---------- */
-function compresser(file) {
-  return new Promise((res, rej) => {
-    const img = new Image(), url = URL.createObjectURL(file);
-    img.onload = () => {
-      const M = 1600, r = Math.min(1, M / Math.max(img.width, img.height));
-      const c = document.createElement('canvas'); c.width = Math.round(img.width * r); c.height = Math.round(img.height * r);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(url);
-      res(c.toDataURL('image/jpeg', 0.82));
-    };
-    img.onerror = rej; img.src = url;
-  });
-}
-// Une ou plusieurs photos (appareil photo ou galerie), envoyées l'une après l'autre
-async function envoyerPhotos(files) {
-  const b = S.d.inventaire.find(x => x.id === (S.form || {}).id); if (!b || !b.row || !files.length) return;
-  const n = files.length; let ok = 0, nb = 0, erreur = '';
-  for (let i = 0; i < n; i++) {
-    const box = $('#photoBox');
-    if (box) box.innerHTML = `<div class="photo-busy"><span class="spin"></span>Envoi ${n > 1 ? 'de la photo ' + (i + 1) + '/' + n : 'de la photo'} vers le Drive…</div>`;
-    try {
-      const data = await compresser(files[i]);
-      const r = await api('photo', { row: b.row, attendu: { objet: b.srvObjet || b.objet }, image: data });
-      if (!r.ok) throw new Error(r.message);
-      b.photo = r.photo; b.photoLabel = r.photoLabel; nb = r.nb; ok++; sauver();
-    } catch (e) { erreur = (e && e.message) || (e && e.type === 'error' ? 'format d\'image non lu' : 'connexion impossible'); if (!navigator.onLine) break; }
-  }
-  if (ok) toast('📷 ' + (ok > 1 ? ok + ' photos rangées' : 'Photo rangée') + ' dans le Drive (' + nb + ')');
-  if (S.form && S.form.id === b.id) ouvrirBien(b.id);
-  rendre(true);
-  if (ok < n) { const box = $('#photoBox'); if (box) box.innerHTML = `<div class="photo-busy" style="color:var(--red)">${n - ok} photo${n - ok > 1 ? 's' : ''} non envoyée${n - ok > 1 ? 's' : ''} : ${esc(erreur)}</div>`; }
-}
-const envoyerPhoto = f => envoyerPhotos([f]);
 
 /* ---------- contacts ---------- */
 function ouvrirContact(id) {
@@ -984,109 +799,19 @@ function enregistrerContact() {
   fermer(); rendre(true); toast('Contact enregistré');
 }
 function supprimerContact() {
+  if (!S.form.arm) { S.form.arm = true; const b = document.querySelector('[data-act="c-del"]'); if (b) b.textContent = 'Toucher encore pour supprimer'; return; }   // 1.8 : confirmation
   const c = S.d.contacts.find(x => x.id === S.form.id); fermer(); if (!c) return;
   S.d.contacts = S.d.contacts.filter(x => x !== c);
+  if (!c.row) retirerEnAttente('contact', c.id);
   if (c.row) enfiler({ op: 'call', action: 'contact-del', payload: { row: c.row, attendu: c.srv || { pourquoi: c.pourquoi, nom: c.nom } } });
   rendre(true); toast('Contact supprimé');
 }
 
-/* ---------- sélection MAIF (colonne O du Sheet) ---------- */
-function basculerMaif() {
-  const b = S.d.inventaire.find(x => x.id === S.form.id); if (!b || !b.row) return;
-  b.maif = !b.maif;
-  enfiler({ op: 'call', action: 'inv-maif', payload: { row: b.row, attendu: { objet: b.srvObjet || b.objet }, maif: b.maif } });
-  ouvrirBien(b.id); rendre(true);
-  toast(b.maif ? '🛡 Ajouté au dossier MAIF' : 'Retiré du dossier MAIF');
-}
 
-/* ---------- export du dossier (PDF / Word) ---------- */
-function ouvrirExport(ludo) {
-  S.form = { mode: 'export', pieces: new Set(S.iPiece ? [S.iPiece] : []), annexes: true, maif: S.d.inventaire.some(b => b.maif), ludo: !!ludo && (S.d.jeux || []).length > 0, st: S.expSt || null, dernier: S.expDernier || null, charge: !S.expSt };
-  ouvrir(''); rendreExport(); suivreExport();
-}
-function rendreExport() {
-  const f = S.form; if (!f || f.mode !== 'export') return;
-  const I = S.d.inventaire, L = S.d.listes.pieces.filter(p => I.some(b => b.piece === p));
-  I.forEach(b => { if (L.indexOf(b.piece) < 0) L.push(b.piece); });
-  const nMaif = I.filter(b => b.maif).length;
-  if (!nMaif) f.maif = false;
-  const sel = I.filter(b => (!f.pieces.size || f.pieces.has(b.piece)) && (!f.maif || b.maif));
-  const st = f.st, enCours = st && (st.etat === 'attente' || st.etat === 'en cours');
-  const ago = iso => { const m = Math.round((Date.now() - new Date(iso)) / 60000); return m < 1 ? "à l'instant" : m < 60 ? 'il y a ' + m + ' min' : new Date(iso).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }); };
-  const J = (S.d.jeux || []).filter(j => j.assure), lot = I.find(estLotJeux);
-  let h = tete('Dossier pour l\'assurance', f.ludo ? 'Ludothèque : vue d\'ensemble, récap par type et liste des jeux avec leur valeur à neuf' : 'Couverture, récap par pièce, une fiche par bien avec ses photos, puis les factures en annexe');
-  if (!enCours && (S.d.jeux || []).length) h += `<div class="lbl">Contenu</div><div class="chips wrap"><button class="chip ${!f.ludo ? 'on' : ''}" data-act="x-ludo" data-v="0">📄 Inventaire</button><button class="chip ${f.ludo ? 'on' : ''}" data-act="x-ludo" data-v="1">🎲 Ludothèque<small>${J.length}</small></button></div>`;
-  if (!enCours && f.ludo) {
-    h += `<div class="kv" style="margin-top:10px"><div>Jeux et extensions</div><div><b>${J.length}</b> · ${e0(valeurLudo())}</div>
-    <div>Sans prix</div><div>${J.filter(j => !j.valeur).length}</div><div>Vue d'ensemble</div><div>${lot && lot.photo ? '📷 photos de la ligne « Jeux de société »' : 'pas encore de photo des étagères'}</div></div>
-    <button class="go" data-act="x-go" ${lot && !f.envoi ? '' : 'disabled'}>${f.envoi ? 'Lancement…' : '🎲 Générer la ludothèque'}</button>
-    <p class="muted" style="font-size:12.5px;font-style:italic;margin:8px 2px 0">Couverture avec les chiffres clés, photos des étagères si tu en as ajouté sur la ligne « Jeux de société », puis la liste complète. PDF et Word, un mail arrive avec les liens.</p>`;
-  } else if (!enCours) {
-    h += `<div class="lbl">Biens</div><div class="chips wrap"><button class="chip ${f.maif ? 'on' : ''}" data-act="x-sel" data-v="1" ${nMaif ? '' : 'disabled style="opacity:.45"'}>🛡 Sélection MAIF<small>${nMaif}</small></button><button class="chip ${!f.maif ? 'on' : ''}" data-act="x-sel" data-v="0">Tout l'inventaire<small>${I.length}</small></button></div>
-    ${nMaif ? '' : '<p class="muted" style="font-size:12.5px;font-style:italic;margin:2px 2px 0">Aucun bien coché : ouvre une fiche et « Ajouter au dossier MAIF ».</p>'}
-    <div class="lbl">Pièces</div><div class="chips wrap"><button class="chip ${!f.pieces.size ? 'on' : ''}" data-act="x-piece" data-p="">Toutes</button>${L.map(p => `<button class="chip ${f.pieces.has(p) ? 'on' : ''}" data-act="x-piece" data-p="${esc(p)}">${esc(p)}<small>${I.filter(b => b.piece === p).length}</small></button>`).join('')}</div>
-    <div class="lbl">Factures</div><div class="chips wrap"><button class="chip ${f.annexes ? 'on' : ''}" data-act="x-ann" data-v="1">Jointes en annexe</button><button class="chip ${!f.annexes ? 'on' : ''}" data-act="x-ann" data-v="0">Fiches seules</button></div>
-    <div class="kv" style="margin-top:10px"><div>Biens</div><div><b>${sel.length}</b> · ${e0(sel.filter(b => b.categorie !== 'Travaux').reduce((s, b) => s + (Number(b.prix) || 0), 0))}</div>
-    <div>Avec facture</div><div>${sel.filter(b => b.facture).length} / ${sel.length}</div><div>Avec photo</div><div>${sel.filter(b => b.photo).length} / ${sel.length}</div></div>
-    <button class="go" data-act="x-go" ${sel.length && !f.envoi ? '' : 'disabled'}>${f.envoi ? 'Lancement…' : '📄 Générer le dossier'}</button>
-    <p class="muted" style="font-size:12.5px;font-style:italic;margin:8px 2px 0">Génération en arrière-plan : quelques minutes la première fois (les factures sont récupérées dans Gmail et le Drive), plus rapide ensuite. Un mail arrive avec les liens.</p>`;
-  }
-  if (f.charge) h += `<div class="empty">Vérification des exports…</div>`;
-  if (enCours) h += `<div class="prog"><div class="lab">Export en cours${st.pieces && st.pieces.length ? ' · ' + esc(st.pieces.join(', ')) : ''}</div><div class="et">${esc(st.etape || '…')}</div>
-    <div class="gauge run"><i style="width:${Math.max(4, st.pct || 0)}%"></i></div><div class="sub">${st.pct || 0} % · tu peux fermer l'appli, le mail suivra</div>
-    <button class="stop ${f.stop ? 'conf' : ''}" data-act="x-stop" ${f.arret ? 'disabled' : ''}>${f.arret ? 'Annulation…' : f.stop ? 'Touche encore pour confirmer' : '✕ Annuler l\'export'}</button></div>`;
-  if (st && st.etat === 'termine') h += `<div class="okbox"><h4>✓ ${st.ludo ? 'Ludothèque prête' : 'Dossier prêt'}</h4><div style="font-size:13.5px">${st.ludo ? st.nbJeux + ' jeux · ' + e0(st.valeurJeux) + ' · ' + ago(st.fin) + '</div>' : `${st.nbBiens} biens · ${st.nbAnnexes}${st.nbAnnexesPrevues ? '/' + st.nbAnnexesPrevues : ''} factures en annexe${st.pagesAnnexes ? ' (' + st.pagesAnnexes + ' p.)' : ''} · ${ago(st.fin)}</div>`}
-    ${(st.avertissements || []).length ? `<ul class="warnlist">${st.avertissements.map(a => `<li>${esc(a)}</li>`).join('')}</ul>` : ''}</div>
-    <a class="go" href="${esc(st.pdf)}" target="_blank" rel="noopener">Ouvrir le PDF</a>
-    <div class="btnrow">${st.docx ? `<a class="go sec2" href="${esc(st.docx)}" target="_blank" rel="noopener">Version Word</a>` : ''}<a class="go sec2" href="${esc(st.dossier)}" target="_blank" rel="noopener">Dossier Drive</a></div>`;
-  else if (st && st.etat === 'annule') h += `<div class="note">Export annulé${st.fin ? ' ' + ago(st.fin) : ''}. Tu peux en relancer un.</div>`;
-  else if (st && st.etat === 'erreur') h += `<div class="errbox"><b>L'export a échoué</b><br>${esc(st.message || '')}</div>`;
-  if (f.dernier && !(st && st.etat === 'termine')) h += `<div class="lbl">Dernier dossier</div><div class="list"><a class="item tap" href="${esc(f.dernier.pdf)}" target="_blank" rel="noopener" style="color:inherit;text-decoration:none"><div class="grow"><div class="ttl">${esc(f.dernier.ludo ? 'Ludothèque' : (f.dernier.pieces || []).length ? f.dernier.pieces.join(', ') : 'Inventaire complet')}</div><div class="desc">${f.dernier.ludo ? f.dernier.nbJeux + ' jeux · ' + e0(f.dernier.valeurJeux) : f.dernier.nbBiens + ' biens · ' + f.dernier.nbAnnexes + ' factures'} · ${ago(f.dernier.fin)}</div></div><span class="badge">PDF ›</span></a></div>`;
-  $('#sheetIn').innerHTML = h;
-}
-async function suivreExport() {
-  if (S.expPoll) return; S.expPoll = true;
-  try {
-    while (S.form && S.form.mode === 'export') {
-      let r = null;
-      try { r = await api('export-statut'); } catch (e) { if (S.form) { S.form.charge = false; rendreExport(); } toast('Connexion impossible'); break; }
-      if (!S.form || S.form.mode !== 'export') break;
-      if (!r.ok) { S.form.charge = false; rendreExport(); if (r.error === 'ACTION') toast('Mets à jour le script (Export.gs)'); break; }
-      S.expSt = S.form.st = r.statut; S.expDernier = S.form.dernier = r.dernier; S.form.charge = false; rendreExport();
-      if (!r.statut || (r.statut.etat !== 'attente' && r.statut.etat !== 'en cours')) break;
-      await new Promise(ok => setTimeout(ok, 4000));
-    }
-  } finally { S.expPoll = false; }
-}
-async function lancerExport() {
-  const f = S.form; f.envoi = true; rendreExport();
-  try {
-    const r = await api('export', f.ludo ? { ludo: true } : { pieces: [...f.pieces], annexes: f.annexes, maif: f.maif });
-    f.envoi = false;
-    if (!r.ok && r.error !== 'EN_COURS') { toast(r.error === 'ACTION' ? 'Mets à jour le script (Export.gs)' : 'Échec : ' + r.message); rendreExport(); return; }
-    S.expSt = f.st = r.statut; rendreExport(); suivreExport();
-  } catch (e) { f.envoi = false; rendreExport(); toast('Connexion impossible'); }
-}
 
-// Annulation en deux touches (la 1re arme le bouton 4 s, la 2e confirme) : pas de fenêtre de confirmation
-async function arreterExport() {
-  const f = S.form; if (!f || f.arret) return;
-  if (!f.stop) {
-    f.stop = true; rendreExport(); clearTimeout(S.stopT);
-    S.stopT = setTimeout(() => { if (S.form && S.form.mode === 'export' && S.form.stop) { S.form.stop = false; rendreExport(); } }, 4000);
-    return;
-  }
-  clearTimeout(S.stopT); f.stop = false; f.arret = true; rendreExport();
-  try {
-    const r = await api('export-annuler');
-    f.arret = false;
-    if (!r.ok) { toast(r.error === 'ACTION' ? 'Mets à jour le script (Code.gs)' : 'Échec : ' + r.message); rendreExport(); return; }
-    S.expSt = f.st = r.statut; rendreExport(); toast(r.deja ? 'L\'export était déjà terminé' : 'Export annulé');
-  } catch (e) { f.arret = false; rendreExport(); toast('Connexion impossible'); }
-}
 
 /* ================= TROPHÉES, THÈMES, AQUARIUM ================= */
-// Tout se calcule ici à partir de l'historique et de l'inventaire ; le serveur garde seulement
+// Tout se calcule ici à partir de l'historique ; le serveur garde seulement
 // le thème choisi, les trophées déjà gagnés et les périodes de vacances (S.d.jeu).
 const THEMES = [
   { id: 'chantier', nom: 'Chantier', ic: '🚧', sw: ['#22252A', '#F5B700', '#EFE6D2'], bd: 'repeating-linear-gradient(-45deg,#F5B700 0 6px,#22252A 6px 12px)' },
@@ -1190,15 +915,6 @@ function bilanMois() {
   const faites = new Set(histo().filter(h => h.date.slice(0, 7) === m).map(h => h.element).filter(el => S.d.entretien.some(t => t.element === el)));
   const reste = S.d.entretien.filter(t => !faites.has(t.element) && t.prochain && t.prochain < fin).length;
   return { faites: faites.size, total: faites.size + reste };
-}
-// entretiens d'aquarium faits à l'heure d'affilée (les plus récents)
-function suiteAquarium() {
-  const T = S.d.entretien.filter(t => /aquarium/i.test(t.zone + ' ' + t.element) && t.freq), ev = [];
-  T.forEach(t => { const ds = datesDe(t.element); for (let i = 1; i < ds.length; i++) ev.push({ d: ds[i], ok: ds[i] <= plusFreq(ds[i - 1], t.freq) }); });
-  if (T.some(t => t.etat === 'EN RETARD')) return 0;
-  ev.sort((a, b) => a.d < b.d ? -1 : 1);
-  let n = 0; for (let i = ev.length - 1; i >= 0 && ev[i].ok; i--) n++;
-  return n;
 }
 
 /* ---------- trophées ---------- */
@@ -1394,6 +1110,7 @@ function supprimerConso() {
   if (!S.form.arm) { S.form.arm = true; const b = $('#k-del'); if (b) b.textContent = 'Toucher encore pour supprimer'; return; }
   const c = conso().find(x => x.id === S.form.id); if (!c) return ouvrirConso();
   S.d.consommables = conso().filter(x => x !== c);
+  if (!c.row) retirerEnAttente('conso', c.id);
   if (c.row) enfiler({ op: 'call', action: 'conso-del', payload: { row: c.row, attendu: c.srv || { article: c.article } } });
   ouvrirConso(); rendre(true); toast('Consommable supprimé');
 }
@@ -1405,7 +1122,7 @@ function basculerRachat(id) {
 }
 
 /* ================= À L'AFFICHE : une scène animée par chose à faire ================= */
-// Chaque zone du carnet et chaque partie de l'inventaire a sa scène ; l'état (en retard / bientôt / ok) change le décor.
+// Chaque zone du carnet a sa scène ; l'état (en retard / bientôt / ok) change le décor.
 function sceneTache(t) {
   const x = (t.zone + ' ' + t.element).toLowerCase();
   if (/aquarium/.test(x)) return 'filtreaq';
@@ -1556,7 +1273,7 @@ function affNav(d) {
 /* ---------- trophées : pourquoi, comment, quand ---------- */
 function explication(t) {
   const E = S.d.entretien, H = histo(), d0 = debutCarnet(), sr = series();
-  const I = S.d.inventaire.filter(b => b.categorie !== 'Travaux'), liste = (L, k) => L.slice(0, k || 4).join(', ') + (L.length > (k || 4) ? '…' : '');
+  const liste = (L, k) => L.slice(0, k || 4).join(', ') + (L.length > (k || 4) ? '…' : '');
   const [a, b] = t.prog;
   switch (t.id) {
     case 'chiffon': case 'rode': case 'pilier': case 'legende':
@@ -1570,9 +1287,6 @@ function explication(t) {
       return sr.best ? `Ta meilleure série : ${sr.best} semaine${sr.best > 1 ? 's' : ''} sans retard (du ${fr(sr.bestDebut)} au ${fr(addDays(sr.bestFin, -1))}). Série actuelle : ${sr.cur}.` : 'Pas encore de semaine complète sans retard.';
     case 'mois': { const P = moisListe(24).map(mois).filter(x => x && x.parfait).map(x => MOIS[+x.m.slice(5, 7) - 1] + ' ' + x.m.slice(0, 4));
       return P.length ? `Mois parfait${P.length > 1 ? 's' : ''} : ${liste(P, 6)}.` : 'Aucun mois complet sans retard pour l\'instant (le mois en cours compte quand il sera fini).'; }
-    case 'papa': { const R = I.filter(x => !x.photo); return R.length ? `${a}/${b} biens en photo. Sans photo : ${liste(R.map(x => x.objet))}.` : 'Tout l\'inventaire a sa photo.'; }
-    case 'beton': { const R = I.filter(x => !(x.prix && (x.facture || x.photo))); return R.length ? `${a}/${b} biens complets. À compléter : ${liste(R.map(x => x.objet))}.` : 'Chaque bien a un prix et une facture ou une photo.'; }
-    case 'ludo': { const R = (S.d.jeux || []).filter(j => j.assure && !j.valeur); return (S.d.jeux || []).length ? (R.length ? `Sans valeur : ${liste(R.map(j => j.titre))}.` : 'Tous les jeux assurés ont une valeur.') : 'Ludothèque vide pour l\'instant.'; }
     case 'conso': { const R = (S.d.consommables || []).filter(c => !(c.prix && c.lien)); return R.length ? `Sans prix ou sans lien : ${liste(R.map(c => c.article))}.` : 'Chaque consommable a un prix et un lien d\'achat.'; }
     case 'annee': return d0 ? `Premier passage noté le ${fr(d0)} (il y a ${diffJ(today(), d0)} jours).` : 'Aucun passage noté.';
   }
@@ -1614,7 +1328,7 @@ function ouvrirReglages() {
   S.form = { mode: 'reglages' };
   ouvrir(tete('Réglages') + `
     <div class="kv">
-      <div>Mail d'échéance</div><div>${sv.mailActif ? '✅ actif · chaque matin, seulement s\'il y a quelque chose à faire' : '⚠️ inactif : lance « installer » dans Apps Script'}</div>
+      <div>Mail d'échéance</div><div>${sv.mailPause ? '⏸ en pause tant que le fichier est chez Théo (Carla lancera « installer » après le transfert)' : sv.mailActif ? '✅ actif · une seule fois par tâche, le matin de son échéance' : '⚠️ inactif : lance « installer » dans Apps Script'}</div>
       <div>Envoyé à</div><div>${esc(sv.destinataire || '—')}</div>
       <div>Dernier mail</div><div class="mono">${sv.dernierMail ? new Date(sv.dernierMail).toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'short' }) : 'aucun pour l\'instant'}</div>
       <div>Écritures</div><div>${S.queue.length ? S.queue.length + ' en attente d\'envoi' : 'tout est enregistré'}</div>
@@ -1623,16 +1337,16 @@ function ouvrirReglages() {
     <button class="go" data-act="trophees">🏆 Trophées, thèmes et vacances</button>
     <button class="go sec2" data-act="mailtest">Envoyer un mail de test</button>
     <div class="btnrow"><button class="go sec2" data-act="refresh">↻ Actualiser</button><a class="go sec2" href="${SHEET_URL}" target="_blank" rel="noopener">Ouvrir le Sheet</a></div>
-    <button class="go danger" data-act="logout">Changer de clé d'accès</button>`);
+    <button class="go danger" data-act="logout">Changer d'adresse ou de clé</button>`);
 }
 
 /* ================= VERROU ================= */
 function verrouiller(msg) {
   const l = $('#lock'); l.hidden = false;
-  const besoinUrl = !API_URL || API_URL.startsWith('COLLE');
+  const besoinUrl = true;   // toujours affichée (pré-remplie) : après le transfert, Carla y colle sa nouvelle adresse
   l.innerHTML = `<div class="in"><img src="icon-192.png" alt=""><h1>Carnet · T4</h1>
     <p class="muted" style="margin:0 0 18px;font-style:italic">Carnet d'entretien de l'appartement</p>
-    ${besoinUrl ? `<input class="field" id="kurl" placeholder="URL de l'API (…/exec)" value="${esc(S.url || '')}" autocomplete="off">` : ''}
+    ${besoinUrl ? `<input class="field" id="kurl" placeholder="URL de l'API (…/exec)" value="${esc(S.url || API_URL || '')}" autocomplete="off">` : ''}
     <input class="field" id="kin" type="password" placeholder="Clé d'accès" autocomplete="current-password">
     <div class="err" id="kerr">${msg ? esc(msg) : ''}</div>
     <button class="go" id="kgo">Ouvrir le carnet</button></div>`;
@@ -1645,7 +1359,7 @@ function verrouiller(msg) {
     try {
       const r = await api('data');
       if (!r.ok) { go.textContent = 'Ouvrir le carnet'; $('#kerr').textContent = r.message || 'Clé incorrecte'; return; }
-      LS.set('key', v); if (u) LS.set('url', u); S.queue = []; S.d = null; charger(r.data);
+      LS.set('key', v); if (u) LS.set('url', u); S.d = null; charger(r.data); if (S.queue.length) pomper();   // 1.8 : la file n'est plus effacée
       l.hidden = true; S.lastFetch = Date.now(); setSync('ok'); rendre();
     } catch (e) { go.textContent = 'Ouvrir le carnet'; $('#kerr').textContent = 'Connexion impossible. Vérifie l\'URL et ta connexion.'; }
   };
@@ -1686,40 +1400,17 @@ document.addEventListener('click', ev => {
     case 'passage': { const h = S.d.historique.find(x => x.id === el.dataset.id); if (h) ouvrirFait(h.element, h); break; }
     case 'ipiece': S.iPiece = el.dataset.p || null; rendre(true); break;
     case 'ifiltre': S.iFiltre = S.iFiltre === el.dataset.f ? null : el.dataset.f; rendre(true); break;
-    case 'bien': ouvrirBien(el.dataset.id); break;
-    case 'bien-new': ouvrirBienEdit(null); break;
-    case 'bien-edit': ouvrirBienEdit(S.form.id); break;
-    case 'b-piece': lireBienForm(); S.form.v.piece = el.dataset.p; rendreBienEdit(); break;
-    case 'b-gar': { lireBienForm(); const v = S.form.v; v.garantie = Math.max(0, Math.min(10, (+v.garantie || 0) + +el.dataset.d)); $('#b-gar').textContent = v.garantie + ' an' + (v.garantie > 1 ? 's' : ''); break; }
-    case 'b-save': enregistrerBien(); break;
-    case 'b-del': supprimerBien(); break;
-    case 'photo': $('#fileIn').value = ''; $('#fileIn').click(); break;
-    case 'photo-gal': $('#galIn').value = ''; $('#galIn').click(); break;
     case 'contact': ouvrirContact(el.dataset.id); break;
     case 'contact-new': ouvrirContact(null); break;
     case 'c-save': enregistrerContact(); break;
     case 'c-del': supprimerContact(); break;
     case 'refresh': fermer(); S.lastFetch = 0; rafraichir(true); toast('Actualisation…'); break;
     case 'mailtest': api('mail-test').then(r => toast(r.ok ? '📧 Mail de test envoyé' : 'Échec : ' + r.message)).catch(() => toast('Connexion impossible')); break;
-    case 'export': ouvrirExport(); break;
-    case 'ludo': ouvrirLudo(); break;
-    case 'lfiltre': S.lf = S.lf === el.dataset.f ? '' : el.dataset.f; ouvrirLudo(); break;
-    case 'jeu': ouvrirJeu(el.dataset.row); break;
-    case 'jeu-assure': basculerJeu(); break;
-    case 'maif': basculerMaif(); break;
-    case 'x-sel': S.form.maif = el.dataset.v === '1'; rendreExport(); break;
-    case 'x-piece': { const p = el.dataset.p, P = S.form.pieces; if (!p) P.clear(); else if (P.has(p)) P.delete(p); else P.add(p); rendreExport(); break; }
-    case 'x-ann': S.form.annexes = el.dataset.v === '1'; rendreExport(); break;
-    case 'x-go': lancerExport(); break;
-    case 'x-stop': arreterExport(); break;
-    case 'x-ludo': S.form.ludo = el.dataset.v === '1'; rendreExport(); break;
-    case 'export-ludo': ouvrirExport(true); break;
     case 'trophees': ouvrirTrophees(); break;
     case 'trophee': ouvrirTrophee(el.dataset.id); break;
     case 'aide': ouvrirAide(); break;
     case 'aff-prev': affNav(-1); break;
     case 'aff-next': affNav(1); break;
-    case 'aff-photos': fermer(); S.tab = 'inventaire'; S.iPiece = el.dataset.p || null; S.iFiltre = 'photo'; rendre(); scrollTo(0, 0); break;
     case 'theme': choisirTheme(el.dataset.t); break;
     case 'vac-add': ajouterVacances(); break;
     case 'vac-del': retirerVacances(el.dataset.d); break;
@@ -1735,11 +1426,7 @@ document.addEventListener('click', ev => {
   }
 });
 document.addEventListener('input', ev => {
-  if (ev.target.id === 'iq') { S.iq = ev.target.value; $('#ilist').innerHTML = listeBiens(); }
-  if (ev.target.id === 'lq') { S.lq = ev.target.value; $('#llist').innerHTML = listeJeux(); }
 });
-$('#fileIn').addEventListener('change', e => { const f = e.target.files && e.target.files[0]; if (f) envoyerPhoto(f); });
-$('#galIn').addEventListener('change', e => { const L = [...(e.target.files || [])].slice(0, 10); if (L.length) envoyerPhotos(L); });
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { rafraichir(false); pomper(); } });
 
 /* ================= DÉMARRAGE ================= */
