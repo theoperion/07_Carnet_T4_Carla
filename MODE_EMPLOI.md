@@ -17,7 +17,7 @@
 - ✅ C4 Nom « Carnet T4 » et hors connexion séparé : n'efface plus celui de Versus ni du Carnet T3
 - ✅ C5 Calée sur le Carnet T3 1.8 : mise à jour fiable, envois jamais perdus ni en double, clé hors de l'adresse, mail une seule fois
 - ✅ C6 Ménage : ~330 lignes d'inventaire retirées, mode d'emploi, un seul numéro de version, coche ✓ au centre (onglet Trophées ajouté)
-- ⬜ C2 Partage du Sheet « Tout le monde avec le lien · Éditeur » : à fermer au transfert (étape Théo 3)
+- ⏸ C2 Partage du Sheet « Tout le monde avec le lien · Éditeur » : **laissé ouvert exprès** (Théo n'a pas encore l'adresse Gmail de Carla, c'est son seul accès au Sheet). À fermer au transfert (étape Théo 3).
 - ⬜ Transfert à Carla (ci-dessous)
 
 ## 3. Transfert à Carla (≈ 15 min, sans Claude)
