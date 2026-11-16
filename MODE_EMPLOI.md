@@ -80,3 +80,4 @@
 |---|---|
 | 05/11/2026 | Appli 1.8.3 + script 1.8.1 (version Google 2) : C1, C3–C6. Fiche de transfert. |
 | 05/11/2026 | Appli 1.8.4 + script 1.8.2 (version Google 3) : le lien des mails suit l'adresse de l'appli ; fiche : transfert du dépôt GitHub |
+| 17/11/2026 | appli 1.8.5 | La page ne saute plus quand un bouton redessine l'écran ; bouton retour du téléphone : ferme la fenêtre ouverte, puis revient au tableau de bord, puis quitte (fini l'écran noir). |

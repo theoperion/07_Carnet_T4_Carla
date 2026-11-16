@@ -1446,6 +1446,23 @@ charger = function (d) {
   _charger(d); if (local) S.d.jeu = local;
   idsLocaux(); sauver(); appliquerTheme(jeu().theme);
 };
+/* 1.8.5 : la page ne saute plus quand un bouton redessine l'écran (elle garde sa hauteur le temps du rendu) */
+['click', 'change'].forEach(t => document.addEventListener(t, e => {
+  if (!e.target.closest || e.target.closest('#sheet')) return;
+  const c = document.body; c.style.minHeight = document.documentElement.scrollHeight + 'px';
+  clearTimeout(c._garde); c._garde = setTimeout(() => { c.style.minHeight = ''; }, 600);
+}, true));
+/* Bouton retour du téléphone : ferme la fenêtre ouverte, puis revient au tableau de bord, puis quitte (plus d'écran noir) */
+(() => { try {
+  if (!history.state || history.state.carnet !== 'garde') { history.replaceState({ carnet: 'base' }, ''); history.pushState({ carnet: 'garde' }, ''); }
+  addEventListener('popstate', e => {
+    if (e.state && e.state.carnet === 'garde') return;
+    const rester = () => history.pushState({ carnet: 'garde' }, '');
+    if ($('#sheet').classList.contains('on')) { fermer(); rester(); return; }
+    if (S.tab !== 'bord') { S.tab = 'bord'; rendre(); scrollTo(0, 0); rester(); return; }
+    history.back();
+  });
+} catch (e) {} })();
 idsLocaux();
 appliquerTheme(LS.get('theme', 'chantier'));
 if (!S.key || !apiUrl()) verrouiller(); else { rendre(); rafraichir(true); pomper(); }
