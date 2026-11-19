@@ -9,6 +9,11 @@ Ce fichier remplace la mémoire des conversations précédentes (jusqu'au 18/11/
 - C'est une copie du **Carnet T3** de Théo (dépôt `03_carnet_d_entretien`) **sans inventaire** : entretien, historique,
   consommables, contacts, trophées. Une correction utile faite sur le T3 doit en général être reportée ici (et inversement).
 
+## Façon de travailler avec Théo (demandée par Théo le 19/11/2026, valable pour TOUTES les conversations)
+- **Être force de proposition** : à chaque échange, proposer de soi-même des idées, des améliorations et des pistes originales, pas seulement exécuter ce qui est demandé.
+- **Être innovant et ambitieux** (« pousser l'IA et le code dans leurs retranchements ») et **challenger Théo** : donner un avis franc, dire quand une idée peut être meilleure, proposer une alternative.
+- **Travailler ensemble** : Claude propose → Théo choisit et valide → Claude construit. Après chaque étape, relancer avec la suite et 2 ou 3 idées nouvelles.
+
 ## Où est quoi
 - Appli : ce dépôt (GitHub Pages, **public**) : `index.html`, `sw.js`, `manifest.json`, icônes ; **version** dans `version.js`.
 - Script Google : dépôt **privé** `theoperion/app_scripts`, dossier `carnet-t4-carla/`.
